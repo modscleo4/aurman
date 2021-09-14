@@ -142,15 +142,20 @@ def update_packages():
                 install_package(pkg)
 
 
+def list_packages():
+    print("\n".join(map(lambda x: f'{x[0]}: {x[1]}', aur.aur_installed_packages())))
+
+
 def main(args: list[str]) -> int:
     parser = argparse.ArgumentParser(prog='aurman',
-                                     usage='%(prog)s [options] package_name',
+                                     usage='%(prog)s [options]',
                                      description='Python 3 AUR CLI Manager',
                                      epilog='Based on AUR RPC interface. Made by Modscleo4.')
 
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-S', help='install provided packages', nargs='+')
-    group.add_argument('-Q', help='search provided packages on AUR', nargs='+')
+    group.add_argument('-S', help='install provided packages', nargs='+', metavar='pkg')
+    group.add_argument('-Q', help='list installed packages', action='store_true')
+    group.add_argument('-s', help='search provided packages on AUR', nargs='+', metavar='pkg')
     group.add_argument('-u', help='update installed packages', action='store_true')
 
     arguments = parser.parse_args()
@@ -160,8 +165,10 @@ def main(args: list[str]) -> int:
             for pkg in arguments.S:
                 if not install_package(pkg):
                     return 1
-        elif arguments.Q != None:
-            for pkg in arguments.Q:
+        elif arguments.Q:
+            list_packages()
+        elif arguments.s != None:
+            for pkg in arguments.s:
                 if not search_package(pkg):
                     return 1
         elif arguments.u:

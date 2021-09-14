@@ -34,7 +34,7 @@ def get_aur_package_info(pkg: str):
     return pkginfo
 
 
-def aur_installed_packages():
+def aur_installed_packages() -> list[str]:
     out = subprocess.run(['pacman', '-Qm'], stdout=subprocess.PIPE)
     if out.returncode != 0:
         return -1
