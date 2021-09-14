@@ -103,6 +103,9 @@ dist
 # TernJS port file
 .tern-port
 
+# CPython Files
+__pycache__/
+
 # OS generated files #
 ######################
 .DS_Store
