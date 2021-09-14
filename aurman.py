@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-#
 # A Python 3 Arch Linux AUR CLI Manager
 #
 # Copyright 2021 Dhiego Cassiano Fogaça Barbosa <modscleo4@outlook.com>
@@ -16,51 +15,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
+import argparse
+import subprocess
+import requests
+import sys
+
+import aur
+import pacman
+
+# Where to clone packages
 AURMAN_PATH = '/tmp/aurman'
 
-import sys
-import requests
-import subprocess
-import argparse
 
 class AURManException(Exception):
     pass
-
-
-def search_pacman(pkg: str) -> bool:
-    return subprocess.run(['pacman', '-Ss', f'^{pkg}$'], stdout=subprocess.DEVNULL).returncode == 0
-
-
-def get_package_version(pkg: str) -> str:
-    out = subprocess.run(['pacman', '-Qs', f'^{pkg}$'], stdout=subprocess.PIPE)
-    if out.returncode != 0:
-        return -1
-
-    return out.stdout.decode().split(' ')[1].strip()
-
-
-def get_aur_package_info(pkg: str):
-    res = requests.get(f'https://aur.archlinux.org/rpc?v=5&type=info&arg[]={pkg}')
-    if res.status_code != 200:
-        raise AURManException('Could not connect to AUR.')
-
-    result = res.json()
-
-    if result['resultcount'] == 0:
-        return None
-
-    pkginfo = result['results'][0]
-    return pkginfo
-
-
-def aur_installed_packages():
-    out = subprocess.run(['pacman', '-Qm'], stdout=subprocess.PIPE)
-    if out.returncode != 0:
-        return -1
-
-    return map(lambda x: x.split(' '), out.stdout.decode().strip().split("\n"))
 
 
 def search_package(q: str, select: bool = False) -> str:
@@ -101,19 +70,19 @@ def search_package(q: str, select: bool = False) -> str:
 def install_package(pkg: str, dependency: bool = False) -> bool:
     PKG_PATH = f'{AURMAN_PATH}/{pkg}'
 
-    if search_pacman(pkg):
+    if pacman.search_pacman(pkg):
         if dependency:
             return True
 
         if (input(f'The package {pkg} is on PacMan. Install from there? [Y/n]: ').lower() != 'n'):
-            pacman = subprocess.run(['sudo', 'pacman',  '-Su', '--needed', pkg])
-            if pacman.returncode != 0:
+            procout = subprocess.run(['sudo', 'pacman',  '-Su', '--needed', pkg])
+            if procout.returncode != 0:
                 print(f'Error installing {pkg} from PacMan.')
                 return False
 
             return True
 
-    pkginfo = get_aur_package_info(pkg)
+    pkginfo = aur.get_aur_package_info(pkg)
     if pkginfo is None:
         print(f'Package {pkg} not found.')
         if (input(f'Search {pkg} on AUR? [Y/n]: ').lower() != 'n'):
@@ -121,7 +90,7 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
 
         pkg = search_package(pkg, True)
 
-    if pkginfo['Version'] == get_package_version(pkg):
+    if pkginfo['Version'] == pacman.get_package_version(pkg):
         print(f"Skipping {pkg}: Already installed and updated (version {pkginfo['Version']}).")
         return True
 
@@ -143,13 +112,13 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
         print('')
 
     if (input(f'Continue installation of {pkg}? [Y/n]: ').lower() != 'n'):
-        gitclone = subprocess.run(['git', 'clone', f'https://aur.archlinux.org/{pkg}.git', PKG_PATH])
-        if gitclone.returncode != 0:
+        procout = subprocess.run(['git', 'clone', f'https://aur.archlinux.org/{pkg}.git', PKG_PATH])
+        if procout.returncode != 0:
             print(f'Could not clone {pkg} from git.')
             return False
 
-        makepkg = subprocess.run(['makepkg', '--needed', '-si'], cwd=PKG_PATH)
-        if makepkg.returncode != 0:
+        procout = subprocess.run(['makepkg', '--needed', '-si'], cwd=PKG_PATH)
+        if procout.returncode != 0:
             print(f'Failed to install package {pkg}. Cleaning up.')
 
             if subprocess.run(['rm',  '-rf', PKG_PATH]).returncode != 0:
@@ -157,23 +126,28 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
 
             return False
 
-        if subprocess.run(['rm',  '-rf', PKG_PATH]).returncode != 0:
+        procout = subprocess.run(['rm',  '-rf', PKG_PATH])
+        if procout.returncode != 0:
             print(f'Error removing {pkg} build files.')
 
     return True
 
 
 def update_packages():
-    pkgs = aur_installed_packages()
+    pkgs = aur.aur_installed_packages()
     for [pkg, ver] in pkgs:
-        pkginfo = get_aur_package_info(pkg)
+        pkginfo = aur.get_aur_package_info(pkg)
         if pkginfo != None:
             if pkginfo['Version'] != ver:
                 install_package(pkg)
 
 
 def main(args: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog='aurman', usage='%(prog)s [options] package_name', description='Python 3 AUR CLI Manager', epilog='Based on AUR RPC interface. Made by Modscleo4.')
+    parser = argparse.ArgumentParser(prog='aurman',
+                                     usage='%(prog)s [options] package_name',
+                                     description='Python 3 AUR CLI Manager',
+                                     epilog='Based on AUR RPC interface. Made by Modscleo4.')
+
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-S', help='install provided packages', nargs='+')
     group.add_argument('-Q', help='search provided packages on AUR', nargs='+')
@@ -194,7 +168,7 @@ def main(args: list[str]) -> int:
             if not update_packages():
                 return 1
     except AURManException as e:
-            print(f'FATAL: {e}', file=sys.stderr)
+        print(f'FATAL: {e}', file=sys.stderr)
     except Exception as e:
         print(f"FATAL: Unknown Exception\n\n{e}", file=sys.stderr)
 
