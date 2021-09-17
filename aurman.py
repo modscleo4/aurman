@@ -16,13 +16,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import argparse
-import subprocess
+from dataclasses import dataclass
+import re
 import requests
 import sys
+import subprocess
 
 import aur
 import pacman
+from spinner import Spinner
 
 # Where to clone packages
 AURMAN_PATH = '/tmp/aurman'
@@ -32,34 +37,100 @@ class AURManException(Exception):
     pass
 
 
+@dataclass(eq=True)
+class Package:
+    id: int
+    name: str
+    description: str
+    version: str
+    maintainer: str
+    dependencies: list[str]
+    aur_dependencies: list[Package]
+    popularity: float
+
+    def __init__(self, pkginfo, parse_dependencies: bool = True) -> None:
+        if not 'Depends' in pkginfo:
+            pkginfo['Depends'] = []
+
+        if not 'MakeDepends' in pkginfo:
+            pkginfo['MakeDepends'] = []
+
+        if not 'OptDepends' in pkginfo:
+            pkginfo['OptDepends'] = []
+
+        if not 'CheckDepends' in pkginfo:
+            pkginfo['CheckDepends'] = []
+
+        self.id = pkginfo['ID']
+        self.name = pkginfo['Name']
+        self.description = pkginfo['Description']
+        self.version = pkginfo['Version']
+        self.maintainer = pkginfo['Maintainer']
+        self.popularity = pkginfo['Popularity']
+        self.dependencies = pkginfo['Depends']
+        self.make_dependencies = pkginfo['MakeDepends']
+        self.opt_dependencies = pkginfo['OptDepends']
+        self.check_dependencies = pkginfo['CheckDepends']
+        self.aur_dependencies = []
+
+        if parse_dependencies:
+            for pkg in self.dependencies + self.make_dependencies + self.check_dependencies:
+                pkg = parse_version(pkg)
+                if pacman.search_pacman(pkg):
+                    continue
+
+                self.aur_dependencies.append(Package(aur.get_aur_package_info(pkg)))
+
+    def __repr__(self) -> str:
+        return (f"  Package: {self.name}\n" +
+                f"  Description: {self.description}\n" +
+                f"  Version: {self.version}\n" +
+                f"  Maintainer: {self.maintainer}\n" +
+                f"  Dependencies: {', '.join(self.dependencies + [f'{x} (make)' for x in self.make_dependencies] + [f'{x} (check)' for x in self.check_dependencies]) or 'None'}")
+
+    def __gt__(self, other: Package) -> bool:
+        return self.popularity > other.popularity
+
+    def get_aur_deps(self):
+        return [x for x in (self.aur_dependencies + [x.get_aur_deps() for x in self.aur_dependencies]) if x]
+
+
+class SearchResult(Package):
+    def __repr__(self) -> str:
+        return (f"  ID: {self.id}\n" +
+                f"  Package: {self.name}\n" +
+                f"  Description: {self.description}\n" +
+                f"  Version: {self.version}\n" +
+                f"  Maintainer: {self.maintainer}\n" +
+                f"  Popularity: {self.popularity}")
+
+
+def parse_version(pkg):
+    match = re.search('^[^<>=!]*', pkg)
+    return match.group() if match else ''
+
+
 def search_package(q: str, select: bool = False) -> str:
     res = requests.get(f'https://aur.archlinux.org/rpc?v=5&type=search&arg={q}')
     if res.status_code != 200:
-        print('FATAL: Could not connect to AUR.')
-        raise AURManException('AUR Connection error.')
+        raise AURManException('Could not connect to AUR.')
 
     result = res.json()
-    if result['resultcount'] == 0:
-        print(f'Package {q} not found.')
-        raise AURManException('Package not found.')
+    if result['resultcount']:
+        raise AURManException(f'Package {q} not found.')
+
+    results: list[Package] = [SearchResult(x, False) for x in result['results']]
+    results.sort(reverse=True)
 
     print(f'Search results for {q}:')
-
-    result['results'].sort(reverse=True, key=lambda x: x['Popularity'])
-
-    for pkginfo in result['results']:
-        print(f"  ID: {pkginfo['ID']}")
-        print(f"  Package: {pkginfo['Name']}")
-        print(f"  Description: {pkginfo['Description']}")
-        print(f"  Version: {pkginfo['Version']}")
-        print(f"  Maintainer: {pkginfo['Maintainer']}")
-        print(f"  Popularity: {pkginfo['Popularity']}")
-        print('')
+    for package in results:
+        print(package)
+        print()
 
     if select:
         while True:
-            pkg = input('Please type the desired package name: ')
-            if len(list(filter(lambda p: p['Name'] == pkg, result['results']))) != 0:
+            pkg = input(' :: Please type the desired package name: ')
+            if [x for x in results if x.name == pkg]:
                 return pkg
 
             print(f'Package {pkg} not found in search results.')
@@ -74,7 +145,7 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
         if dependency:
             return True
 
-        if (input(f'The package {pkg} is on PacMan. Install from there? [Y/n]: ').lower() != 'n'):
+        if (input(f' :: The package {pkg} is on PacMan. Install from there? [Y/n]: ').lower() != 'n'):
             procout = subprocess.run(['sudo', 'pacman',  '-Su', '--needed', pkg])
             if procout.returncode != 0:
                 print(f'Error installing {pkg} from PacMan.')
@@ -83,42 +154,39 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
             return True
 
     pkginfo = aur.get_aur_package_info(pkg)
-    if pkginfo is None:
+    if not pkginfo:
         print(f'Package {pkg} not found.')
-        if (input(f'Search {pkg} on AUR? [Y/n]: ').lower() != 'n'):
-            raise AURManException('Package not found.')
+        if (input(f' :: Search {pkg} on AUR? [Y/n]: ').lower() == 'n'):
+            raise AURManException(f'Package {pkg} not found.')
 
-        pkg = search_package(pkg, True)
+        pkginfo = aur.get_aur_package_info(search_package(pkg, True))
 
-    if pkginfo['Version'] == pacman.get_package_version(pkg):
-        print(f"Skipping {pkg}: Already installed and updated (version {pkginfo['Version']}).")
+    # spinner.start()
+    with Spinner():
+        package: Package = Package(pkginfo)
+    # spinner.stop()
+
+    if package.version == pacman.get_package_version(pkg):
+        print(f"Skipping {pkg}: Already installed and updated (version {package.version}).")
         return True
 
-    if not 'Depends' in pkginfo:
-        pkginfo['Depends'] = []
-
-    print(f"  Package: {pkginfo['Name']}")
-    print(f"  Description: {pkginfo['Description']}")
-    print(f"  Version: {pkginfo['Version']}")
-    print(f"  Maintainer: {pkginfo['Maintainer']}")
-    print(f"  Dependencies: {', '.join(pkginfo['Depends'])}")
+    print(package)
     print('')
 
-    if pkginfo['Depends']:
-        print('Processing dependencies...')
-        for dep in pkginfo['Depends']:
-            install_package(dep, True)
+    if (input(f' :: Continue installation of {pkg}? [Y/n]: ').lower() != 'n'):
+        if deps := package.get_aur_deps():
+            print('Processing dependencies...')
+            for dep in deps:
+                if not install_package(dep.name, True):
+                    return False
 
-        print('')
-
-    if (input(f'Continue installation of {pkg}? [Y/n]: ').lower() != 'n'):
         procout = subprocess.run(['git', 'clone', f'https://aur.archlinux.org/{pkg}.git', PKG_PATH])
-        if procout.returncode != 0:
+        if procout.returncode:
             print(f'Could not clone {pkg} from git.')
             return False
 
         procout = subprocess.run(['makepkg', '--needed', '-si'], cwd=PKG_PATH)
-        if procout.returncode != 0:
+        if procout.returncode:
             print(f'Failed to install package {pkg}. Cleaning up.')
 
             if subprocess.run(['rm',  '-rf', PKG_PATH]).returncode != 0:
@@ -130,6 +198,16 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
         if procout.returncode != 0:
             print(f'Error removing {pkg} build files.')
 
+        if (package.make_dependencies and input(f' :: Remove {pkg} Make Dependencies? [Y/n]: ').lower() != 'n'):
+            for dep in package.make_dependencies:
+                if not pacman.remove_package(dep):
+                    print(f'Error removing {dep}.')
+
+        if (package.check_dependencies and input(f' :: Remove {pkg} Check Dependencies? [Y/n]: ').lower() != 'n'):
+            for dep in package.check_dependencies:
+                if not pacman.remove_package(dep):
+                    print(f'Error removing {dep}.')
+
     return True
 
 
@@ -137,9 +215,11 @@ def update_packages():
     pkgs = aur.aur_installed_packages()
     for [pkg, ver] in pkgs:
         pkginfo = aur.get_aur_package_info(pkg)
-        if pkginfo != None:
-            if pkginfo['Version'] != ver:
-                install_package(pkg)
+        if not pkginfo:
+            continue
+
+        if pkginfo['Version'] != ver:
+            install_package(pkg)
 
 
 def list_packages():
@@ -161,13 +241,13 @@ def main(args: list[str]) -> int:
     arguments = parser.parse_args()
 
     try:
-        if arguments.S != None:
+        if arguments.S:
             for pkg in arguments.S:
                 if not install_package(pkg):
                     return 1
         elif arguments.Q:
             list_packages()
-        elif arguments.s != None:
+        elif arguments.s:
             for pkg in arguments.s:
                 if not search_package(pkg):
                     return 1
@@ -176,8 +256,8 @@ def main(args: list[str]) -> int:
                 return 1
     except AURManException as e:
         print(f'FATAL: {e}', file=sys.stderr)
-    except Exception as e:
-        print(f"FATAL: Unknown Exception\n\n{e}", file=sys.stderr)
+    # except Exception as e:
+    #    print(f"FATAL: Unknown Exception\n\n{e}", file=sys.stderr)
 
     return 0
 

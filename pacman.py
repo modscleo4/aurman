@@ -28,3 +28,8 @@ def get_package_version(pkg: str) -> str:
         return -1
 
     return procout.stdout.decode().split(' ')[1].strip()
+
+
+def remove_package(pkg: str) -> bool:
+    procout = subprocess.run(['pacman', '-R', pkg])
+    return procout.returncode == 0
