@@ -45,6 +45,9 @@ class Package:
     version: str
     maintainer: str
     dependencies: list[str]
+    make_dependencies: list[str]
+    opt_dependencies: list[str]
+    check_dependencies: list[str]
     aur_dependencies: list[Package]
     popularity: float
 
@@ -146,7 +149,7 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
             return True
 
         if (input(f' :: The package {pkg} is on PacMan. Install from there? [Y/n]: ').lower() != 'n'):
-            procout = subprocess.run(['sudo', 'pacman',  '-Su', '--needed', pkg])
+            procout = subprocess.run(['sudo', 'pacman',  '-Su', '--asdeps', '--needed', pkg])
             if procout.returncode != 0:
                 print(f'Error installing {pkg} from PacMan.')
                 return False
@@ -161,10 +164,8 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
 
         pkginfo = aur.get_aur_package_info(search_package(pkg, True))
 
-    # spinner.start()
     with Spinner():
         package: Package = Package(pkginfo)
-    # spinner.stop()
 
     if package.version == pacman.get_package_version(pkg):
         print(f"Skipping {pkg}: Already installed and updated (version {package.version}).")
@@ -185,7 +186,7 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
             print(f'Could not clone {pkg} from git.')
             return False
 
-        procout = subprocess.run(['makepkg', '--needed', '-si'], cwd=PKG_PATH)
+        procout = subprocess.run(['makepkg', '--needed', '-si'] + (['--asdeps'] if dependency else []), cwd=PKG_PATH)
         if procout.returncode:
             print(f'Failed to install package {pkg}. Cleaning up.')
 
@@ -256,8 +257,8 @@ def main(args: list[str]) -> int:
                 return 1
     except AURManException as e:
         print(f'FATAL: {e}', file=sys.stderr)
-    # except Exception as e:
-    #    print(f"FATAL: Unknown Exception\n\n{e}", file=sys.stderr)
+    except Exception as e:
+        print(f"FATAL: Unknown Exception\n\n{e}", file=sys.stderr)
 
     return 0
 
