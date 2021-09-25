@@ -30,6 +30,6 @@ def get_package_version(pkg: str) -> str:
     return procout.stdout.decode().split(' ')[1].strip()
 
 
-def remove_package(pkg: str) -> bool:
-    procout = subprocess.run(['sudo', 'pacman', '-R', pkg])
+def remove_package(pkg: str, SU_PROGRAM: str = 'sudo') -> bool:
+    procout = subprocess.run([SU_PROGRAM, 'pacman', '-R', pkg])
     return procout.returncode == 0
