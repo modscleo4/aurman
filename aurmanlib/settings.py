@@ -31,6 +31,12 @@ class Settings:
 
     def __init__(self, FILE: str = '/etc/aurman.conf') -> None:
         self.config.read(FILE)
-        self.su_program = self.config.get('GENERAL', 'SU_PROGRAM', fallback='/usr/bin/sudo')
-        self.autorun = self.config.getboolean('GENERAL', 'AUTORUN', fallback=False)
-        self.aurman_path = self.config.get('GENERAL', 'AURMAN_PATH', fallback='/tmp/aurman')
+        self.su_program = self.config.get('General', 'SU_PROGRAM', fallback='/usr/bin/sudo')
+        self.autorun = self.config.getboolean('General', 'AUTORUN', fallback=False)
+        self.aurman_path = self.config.get('General', 'AURMAN_PATH', fallback='/tmp/aurman')
+
+    def __repr__(self) -> str:
+        return  f"[General]\n"\
+                f"  SU Program: {self.su_program}\n"\
+                f"  Autorun: {self.autorun}\n"\
+                f"  AURMan path: {self.aurman_path}"

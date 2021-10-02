@@ -258,6 +258,11 @@ def update_package_cache(cache_version: bool = False) -> bool:
     return True
 
 
+def show_config() -> bool:
+    print(settings)
+    return True
+
+
 def main(args: list[str]) -> int:
     parser = argparse.ArgumentParser(prog='aurman',
                                      usage='%(prog)s [options]',
@@ -265,6 +270,7 @@ def main(args: list[str]) -> int:
                                      epilog='Based on AUR RPC interface. Made by Modscleo4.')
 
     group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-c', help='show current settings', action='store_true')
     group.add_argument('-y', help='update package cache', action='store_true')
     group.add_argument('-S', help='install provided packages', nargs='+', metavar='pkg')
     group.add_argument('-Q', help='list installed packages', action='store_true')
@@ -274,7 +280,10 @@ def main(args: list[str]) -> int:
     arguments = parser.parse_args()
 
     try:
-        if arguments.y:
+        if arguments.c:
+            if not show_config():
+                return 1
+        elif arguments.y:
             if not update_package_cache():
                 return 1
         elif arguments.S:

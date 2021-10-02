@@ -7,6 +7,7 @@ The basic commands are:
 
 | Command | Description                     |
 |---------|---------------------------------|
+| -c      | Show current settings           |
 | -y      | Update package cache            |
 | -S      | Install provided packages       |
 | -Q      | List installed packages         |
