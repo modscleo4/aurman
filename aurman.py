@@ -26,15 +26,11 @@ import requests
 import sys
 import subprocess
 
-import aur
-import pacman
-from spinner import Spinner
+from aurmanlib import aur, pacman
+from aurmanlib.spinner import Spinner
+from aurmanlib.settings import Settings
 
-# Where to clone packages
-AURMAN_PATH = '/tmp/aurman'
-
-# Sudo
-SU_PROGRAM = 'sudo'
+settings: Settings = Settings()
 
 
 class AURManException(Exception):
@@ -152,14 +148,14 @@ def search_package(q: str, select: bool = False) -> str:
 
 
 def install_package(pkg: str, dependency: bool = False) -> bool:
-    PKG_PATH = f'{AURMAN_PATH}/{pkg}'
+    PKG_PATH = f'{settings.aurman_path}/{pkg}'
 
     if pacman.search_pacman(pkg):
         if dependency:
             return True
 
-        if (input(f' :: The package {pkg} is on PacMan. Install from there? [Y/n]: ').lower() != 'n'):
-            procout = subprocess.run([SU_PROGRAM, 'pacman',  '-Su', '--asdeps', '--needed', pkg])
+        if (settings.autorun or input(f' :: The package {pkg} is on PacMan. Install from there? [Y/n]: ').lower() != 'n'):
+            procout = subprocess.run([settings.su_program, 'pacman',  '-Su', '--asdeps', '--needed', pkg])
             if procout.returncode != 0:
                 print(f'Error installing {pkg} from PacMan.')
                 return False
@@ -184,7 +180,7 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
     print(package)
     print('')
 
-    if (dependency or input(f' :: Continue installation of {pkg}? [Y/n]: ').lower() != 'n'):
+    if (dependency or settings.autorun or input(f' :: Continue installation of {pkg}? [Y/n]: ').lower() != 'n'):
         if deps := package.get_aur_deps():
             print(f' => Processing dependencies of {pkg}...')
             for dep in deps:
@@ -196,11 +192,15 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
             print(f'Could not clone {pkg} from git.')
             return False
 
-        procout = subprocess.run(['makepkg', '--needed', '-sir'] + (['--asdeps'] if dependency else []), cwd=PKG_PATH)
+        procout = subprocess.run(
+            ['makepkg', '--needed', '-sir'] +
+            (['--asdeps'] if dependency else []) +
+            (['--noconfirm'] if settings.autorun else []), cwd=PKG_PATH)
         if procout.returncode:
             print(f'Failed to install package {pkg}. Cleaning up.')
 
-            if subprocess.run(['rm',  '-rf', PKG_PATH]).returncode != 0:
+            procout = subprocess.run(['rm',  '-rf', PKG_PATH])
+            if procout.returncode != 0:
                 print(f'Error removing {pkg} build files.')
 
             return False
@@ -229,22 +229,22 @@ def list_packages():
 
 def update_package_cache(cache_version: bool = False) -> bool:
     STEP = 200
-    if path.exists(f'{AURMAN_PATH}/packages.gz'):
-        unlink(f'{AURMAN_PATH}/packages.gz')
+    if path.exists(f'{settings.aurman_path}/packages.gz'):
+        unlink(f'{settings.aurman_path}/packages.gz')
 
-    with open(f'{AURMAN_PATH}/packages.gz', 'wb') as f:
-        procout = subprocess.run(['curl', 'https://aur.archlinux.org/packages.gz'], cwd=AURMAN_PATH, stdout=f)
+    with open(f'{settings.aurman_path}/packages.gz', 'wb') as f:
+        procout = subprocess.run(['curl', 'https://aur.archlinux.org/packages.gz'], cwd=settings.aurman_path, stdout=f)
         if procout.returncode != 0:
             return False
 
-    procout = subprocess.run(['gzip', '-cd', 'packages.gz'], cwd=AURMAN_PATH, stdout=subprocess.PIPE)
+    procout = subprocess.run(['gzip', '-cd', 'packages.gz'], cwd=settings.aurman_path, stdout=subprocess.PIPE)
     if procout.returncode != 0:
         return False
 
     packages = procout.stdout.decode().strip().split("\n")[1:]
     packages.sort()
 
-    with open(f'{AURMAN_PATH}/packages.txt', 'w') as f:
+    with open(f'{settings.aurman_path}/packages.txt', 'w') as f:
         for i in range(0, len(packages) - 1, STEP):
             pkgs = packages[i:i + STEP]
             if cache_version:
