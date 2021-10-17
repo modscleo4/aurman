@@ -26,9 +26,9 @@ import requests
 import sys
 import subprocess
 
-from aurmanlib import aur, pacman
-from aurmanlib.spinner import Spinner
-from aurmanlib.settings import Settings
+from lib import aur, pacman
+from lib.spinner import Spinner
+from lib.settings import Settings
 
 settings: Settings = Settings()
 
@@ -162,19 +162,21 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
 
             return True
 
-    pkginfo = aur.get_aur_package_info([pkg])[0]
-    if not pkginfo:
+    pkginfos = aur.get_aur_package_info([pkg])
+    if not pkginfos:
         print(f'Package {pkg} not found.')
         if (input(f' :: Search {pkg} on AUR? [Y/n]: ').lower() == 'n'):
             raise AURManException(f'Package {pkg} not found.')
 
-        pkginfo = aur.get_aur_package_info([search_package(pkg, True)])[0]
+        pkginfos = aur.get_aur_package_info([search_package(pkg, True)])
+
+    pkginfo = pkginfos[0]
 
     with Spinner():
         package: Package = Package(pkginfo)
 
-    if package.version == pacman.get_package_version(pkg):
-        print(f" => Skipping {pkg}: Already installed and updated (version {package.version}).")
+    if package.version >= (version := pacman.get_package_version(pkg)):
+        print(f" => Skipping {pkg}: Already installed and updated (version {version}).")
         return True
 
     print(package)
@@ -215,9 +217,11 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
 def update_packages():
     pkgs = aur.aur_installed_packages()
     for [pkg, ver] in pkgs:
-        pkginfo = aur.get_aur_package_info([pkg])[0]
-        if not pkginfo:
+        pkginfos = aur.get_aur_package_info([pkg])
+        if not pkginfos:
             continue
+
+        pkginfo = pkginfos[0]
 
         if pkginfo['Version'] != ver:
             install_package(pkg)

@@ -20,7 +20,7 @@ import subprocess
 from aurman import AURManException
 
 
-def get_aur_package_info(pkg: list[str]):
+def get_aur_package_info(pkg: list[str]) -> list:
     res = requests.get('https://aur.archlinux.org/rpc?v=5&type=info' + ''.join([f'&arg[]={p}' for p in pkg]))
     if res.status_code != 200:
         raise AURManException('Could not connect to AUR.')
@@ -28,7 +28,7 @@ def get_aur_package_info(pkg: list[str]):
     result = res.json()
 
     if result['resultcount'] == 0:
-        return None
+        return []
 
     return result['results']
 

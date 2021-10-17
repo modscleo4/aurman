@@ -36,7 +36,7 @@ class Settings:
         self.aurman_path = self.config.get('General', 'AURMAN_PATH', fallback='/tmp/aurman')
 
     def __repr__(self) -> str:
-        return  f"[General]\n"\
-                f"  SU Program: {self.su_program}\n"\
-                f"  Autorun: {self.autorun}\n"\
-                f"  AURMan path: {self.aurman_path}"
+        return f"[General]\n"\
+            f"  SU Program: {self.su_program}\n"\
+            f"  Autorun: {self.autorun}\n"\
+            f"  AURMan path: {self.aurman_path}"
