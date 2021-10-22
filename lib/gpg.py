@@ -14,28 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import requests
 import subprocess
 
-from aurman import AURManException
 
-
-def get_aur_package_info(pkg: list[str]) -> list:
-    res = requests.get('https://aur.archlinux.org/rpc?v=5&type=info' + ''.join([f'&arg[]={p}' for p in pkg]))
-    if res.status_code != 200:
-        raise AURManException('Could not connect to AUR.')
-
-    result = res.json()
-
-    if result['resultcount'] == 0:
-        return []
-
-    return result['results']
-
-
-def aur_installed_packages() -> list[list[str]]:
-    out = subprocess.run(['pacman', '-Qm'], stdout=subprocess.PIPE)
-    if out.returncode != 0:
-        return -1
-
-    return list(map(lambda x: x.split(' '), out.stdout.decode().strip().split("\n")))
+def import_key(key: str) -> bool:
+    procout = subprocess.run(['gpg', '--keyserver', 'keyserver.ubuntu.com', '--recv-key', key], stdout=subprocess.DEVNULL)
+    return procout.returncode == 0

@@ -20,17 +20,23 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import logging
 from os import path, unlink
+from packaging import version
 import re
 import requests
+from simple_term_menu import TerminalMenu
 import sys
 import subprocess
 
-from lib import aur, pacman
+from lib import aur, pacman, util, gpg
 from lib.spinner import Spinner
 from lib.settings import Settings
 
 settings: Settings = Settings()
+
+
+logging.basicConfig(filename=settings.log_path, level=logging.DEBUG)
 
 
 class AURManException(Exception):
@@ -95,7 +101,10 @@ class Package:
                 f"  Description: {self.description}\n" +
                 f"  Version: {self.version}\n" +
                 f"  Maintainer: {self.maintainer}\n" +
-                f"  Dependencies: {', '.join(self.dependencies + [f'{x} (make)' for x in self.make_dependencies] + [f'{x} (check)' for x in self.check_dependencies]) or 'None'}")
+                "  Dependencies: " + ', '.join(
+                    [util.color_text(f'{x}', util.ASCII_COLOR_CODES.green if pacman.get_package_version(x) != '' else util.ASCII_COLOR_CODES.red) for x in self.dependencies] +
+                    [util.color_text(f'{x} (make)', util.ASCII_COLOR_CODES.green if pacman.get_package_version(x) != '' else util.ASCII_COLOR_CODES.red) for x in self.make_dependencies] +
+                    [util.color_text(f'{x} (check)', util.ASCII_COLOR_CODES.green if pacman.get_package_version(x) != '' else util.ASCII_COLOR_CODES.red) for x in self.check_dependencies]) or 'None')
 
     def __gt__(self, other: Package) -> bool:
         return self.popularity > other.popularity
@@ -125,24 +134,19 @@ def search_package(q: str, select: bool = False) -> str:
         raise AURManException('Could not connect to AUR.')
 
     result = res.json()
-    if result['resultcount']:
+    if not result['resultcount']:
         raise AURManException(f'Package {q} not found.')
 
     results: list[Package] = [SearchResult(x, False) for x in result['results']]
     results.sort(reverse=True)
 
-    print(f'Search results for {q}:')
-    for package in results:
-        print(package)
-        print()
-
     if select:
-        while True:
-            pkg = input(' :: Please type the desired package name: ')
-            if [x for x in results if x.name == pkg]:
-                return pkg
-
-            print(f'Package {pkg} not found in search results.')
+        return results[TerminalMenu(map(lambda x: f'{x.name}: {x.description}', results)).show()].name
+    else:
+        print(f'Search results for {q}:')
+        for package in results:
+            print(package)
+            print()
 
     return ''
 
@@ -175,23 +179,26 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
     with Spinner():
         package: Package = Package(pkginfo)
 
-    if package.version >= (version := pacman.get_package_version(pkg)):
-        print(f" => Skipping {pkg}: Already installed and updated (version {version}).")
-        return True
+    try:
+        if version.parse(package.version) <= version.parse(ver := pacman.get_package_version(package.name)):
+            print(f" => Skipping {package.name}: Already installed and updated (version {ver}).")
+            return True
+    except:
+        raise AURManException(f'Invalid version info for package {package.name}.')
 
     print(package)
     print('')
 
-    if (dependency or settings.autorun or input(f' :: Continue installation of {pkg}? [Y/n]: ').lower() != 'n'):
+    if (dependency or settings.autorun or input(f' :: Continue installation of {package.name}? [Y/n]: ').lower() != 'n'):
         if deps := package.get_aur_deps():
-            print(f' => Processing dependencies of {pkg}...')
+            print(f' => Processing dependencies of {package.name}...')
             for dep in deps:
                 if not install_package(dep.name, True):
                     return False
 
         procout = subprocess.run(['git', 'clone', f'https://aur.archlinux.org/{package.base_package}.git', PKG_PATH])
         if procout.returncode:
-            print(f'Could not clone {pkg} from git.')
+            print(f'Could not clone {package.name} from git.')
             return False
 
         procout = subprocess.run(
@@ -199,17 +206,17 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
             (['--asdeps'] if dependency else []) +
             (['--noconfirm'] if settings.autorun else []), cwd=PKG_PATH)
         if procout.returncode:
-            print(f'Failed to install package {pkg}. Cleaning up.')
+            print(f'Failed to install package {package.name}. Cleaning up.')
 
             procout = subprocess.run(['rm',  '-rf', PKG_PATH])
             if procout.returncode != 0:
-                print(f'Error removing {pkg} build files.')
+                print(f'Error removing {package.name} build files.')
 
             return False
 
         procout = subprocess.run(['rm',  '-rf', PKG_PATH])
         if procout.returncode != 0:
-            print(f'Error removing {pkg} build files.')
+            print(f'Error removing {package.name} build files.')
 
     return True
 
@@ -228,7 +235,15 @@ def update_packages():
 
 
 def list_packages():
-    print("\n".join(map(lambda x: f'{x[0]}: {x[1]}', aur.aur_installed_packages())))
+    STEP = 200
+
+    aur_packages: list[list[str]] = aur.aur_installed_packages()
+    packages: list[Package] = []
+    for i in range(0, len(aur_packages) - 1, STEP):
+        pkgs = [x[0] for x in aur_packages[i:i + STEP]]
+        packages += [Package(_, False) for _ in aur.get_aur_package_info(pkgs)]
+
+    print("\n".join(map(lambda x: f"{x.name}: " + util.color_text(ver := next((_[1] for _ in aur_packages if _[0] == x.name)), util.ASCII_COLOR_CODES.white if (version.parse(ver) >= version.parse(x.version)) else util.ASCII_COLOR_CODES.magenta), packages)))
 
 
 def update_package_cache(cache_version: bool = False) -> bool:
@@ -268,7 +283,7 @@ def show_config() -> bool:
 
 
 def main(args: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog='aurman',
+    parser = argparse.ArgumentParser(prog=args[0],
                                      usage='%(prog)s [options]',
                                      description='Python 3 AUR CLI Manager',
                                      epilog='Based on AUR RPC interface. Made by Modscleo4.')
@@ -280,6 +295,7 @@ def main(args: list[str]) -> int:
     group.add_argument('-Q', help='list installed packages', action='store_true')
     group.add_argument('-s', help='search provided packages on AUR', nargs='+', metavar='pkg')
     group.add_argument('-u', help='update installed packages', action='store_true')
+    group.add_argument('-gpg', help='import the provided GPG keys', nargs='+', metavar='key')
 
     arguments = parser.parse_args()
 
@@ -303,13 +319,17 @@ def main(args: list[str]) -> int:
         elif arguments.u:
             if not update_packages():
                 return 1
+        elif arguments.gpg:
+            for key in arguments.gpg:
+                if not gpg.import_key(key):
+                    return 1
     except AURManException as e:
         print(f'FATAL: {e}', file=sys.stderr)
     except Exception as e:
-        print(f"FATAL: Unknown Exception\n\n{e}", file=sys.stderr)
+        logging.exception(e, exc_info=True, stack_info=True, extra={'prog': 'aurman'})
 
     return 0
 
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main(sys.argv))

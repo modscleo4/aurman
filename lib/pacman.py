@@ -25,7 +25,7 @@ def search_pacman(pkg: str) -> bool:
 def get_package_version(pkg: str) -> str:
     procout = subprocess.run(['pacman', '-Qs', f'^{pkg}$'], stdout=subprocess.PIPE)
     if procout.returncode != 0:
-        return -1
+        return ''
 
     return procout.stdout.decode().split(' ')[1].strip()
 

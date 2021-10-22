@@ -29,14 +29,19 @@ class Settings:
     # Where to clone packages
     aurman_path: str = '/tmp/aurman'
 
+    # Where to store log file
+    log_path: str = '/tmp/aurman.log'
+
     def __init__(self, FILE: str = '/etc/aurman.conf') -> None:
         self.config.read(FILE)
         self.su_program = self.config.get('General', 'SU_PROGRAM', fallback='/usr/bin/sudo')
         self.autorun = self.config.getboolean('General', 'AUTORUN', fallback=False)
         self.aurman_path = self.config.get('General', 'AURMAN_PATH', fallback='/tmp/aurman')
+        self.log_path = self.config.get('General', 'LOG_PATH', fallback='/tmp/aurman.log')
 
     def __repr__(self) -> str:
         return f"[General]\n"\
             f"  SU Program: {self.su_program}\n"\
             f"  Autorun: {self.autorun}\n"\
-            f"  AURMan path: {self.aurman_path}"
+            f"  AURMan path: {self.aurman_path}\n"\
+            f"  Log path: {self.log_path}"
