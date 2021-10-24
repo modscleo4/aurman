@@ -18,19 +18,34 @@ from configparser import ConfigParser
 
 
 class Settings:
+    '''
+    Settings wrapper
+    '''
+
     config: ConfigParser = ConfigParser()
+    '''
+    INI parser
+    '''
 
-    # Sudo
     su_program: str = '/usr/bin/sudo'
+    '''
+    sudo/doas
+    '''
 
-    # If the install should run automatically
     autorun: bool = False
+    '''
+    If the install should run automatically
+    '''
 
-    # Where to clone packages
     aurman_path: str = '/tmp/aurman'
+    '''
+    Where to clone packages
+    '''
 
-    # Where to store log file
     log_path: str = '/tmp/aurman.log'
+    '''
+    Where to store log file
+    '''
 
     def __init__(self, FILE: str = '/etc/aurman.conf') -> None:
         self.config.read(FILE)

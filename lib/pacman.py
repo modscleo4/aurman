@@ -18,11 +18,17 @@ import subprocess
 
 
 def search_pacman(pkg: str) -> bool:
+    '''
+    Search a package in the pacman database.
+    '''
     procout = subprocess.run(['pacman', '-Ss', f'^{pkg}$'], stdout=subprocess.DEVNULL)
     return procout.returncode == 0
 
 
 def get_package_version(pkg: str) -> str:
+    '''
+    Get the package version from the pacman database.
+    '''
     procout = subprocess.run(['pacman', '-Qs', f'^{pkg}$'], stdout=subprocess.PIPE)
     if procout.returncode != 0:
         return ''
@@ -31,5 +37,8 @@ def get_package_version(pkg: str) -> str:
 
 
 def remove_package(pkg: str, SU_PROGRAM: str = 'sudo') -> bool:
+    '''
+    Uninstall a package from the system.
+    '''
     procout = subprocess.run([SU_PROGRAM, 'pacman', '-R', pkg])
     return procout.returncode == 0

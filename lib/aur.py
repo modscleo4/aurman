@@ -21,6 +21,9 @@ from aurman import AURManException
 
 
 def get_aur_package_info(pkg: list[str]) -> list:
+    '''
+    Get package info (name, version, ...) from AUR using RPC interface.
+    '''
     res = requests.get('https://aur.archlinux.org/rpc?v=5&type=info' + ''.join([f'&arg[]={p}' for p in pkg]))
     if res.status_code != 200:
         raise AURManException('Could not connect to AUR.')
@@ -34,6 +37,9 @@ def get_aur_package_info(pkg: list[str]) -> list:
 
 
 def aur_installed_packages() -> list[list[str]]:
+    '''
+    List all installed packages from AUR and the installed version.
+    '''
     out = subprocess.run(['pacman', '-Qm'], stdout=subprocess.PIPE)
     if out.returncode != 0:
         return -1

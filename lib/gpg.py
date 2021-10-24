@@ -18,5 +18,8 @@ import subprocess
 
 
 def import_key(key: str) -> bool:
+    '''
+    Import a key into the keyring.
+    '''
     procout = subprocess.run(['gpg', '--keyserver', 'keyserver.ubuntu.com', '--recv-key', key], stdout=subprocess.DEVNULL)
     return procout.returncode == 0

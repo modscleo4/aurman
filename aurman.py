@@ -87,7 +87,7 @@ class Package:
         if parse_dependencies:
             aur_deps: list[str] = []
             for pkg in self.dependencies + self.make_dependencies + self.check_dependencies:
-                pkg = parse_version(pkg)
+                pkg = remove_version_constraint(pkg)
                 if pacman.search_pacman(pkg):
                     continue
 
@@ -123,12 +123,18 @@ class SearchResult(Package):
                 f"  Popularity: {self.popularity}")
 
 
-def parse_version(pkg):
+def remove_version_constraint(pkg):
+    '''
+    Remove version constraint from package name.
+    '''
     match = re.search('^[^<>=!]*', pkg)
     return match.group() if match else ''
 
 
 def search_package(q: str, select: bool = False) -> str:
+    '''
+    Searches for a package.
+    '''
     res = requests.get(f'https://aur.archlinux.org/rpc?v=5&type=search&arg={q}')
     if res.status_code != 200:
         raise AURManException('Could not connect to AUR.')
@@ -152,6 +158,9 @@ def search_package(q: str, select: bool = False) -> str:
 
 
 def install_package(pkg: str, dependency: bool = False) -> bool:
+    '''
+    Install a package.
+    '''
     PKG_PATH = f'{settings.aurman_path}/{pkg}'
 
     if pacman.search_pacman(pkg):
@@ -222,6 +231,9 @@ def install_package(pkg: str, dependency: bool = False) -> bool:
 
 
 def update_packages():
+    '''
+    Updates all installed packages.
+    '''
     pkgs = aur.aur_installed_packages()
     for [pkg, ver] in pkgs:
         pkginfos = aur.get_aur_package_info([pkg])
@@ -235,6 +247,9 @@ def update_packages():
 
 
 def list_packages():
+    '''
+    List all AUR installed packages.
+    '''
     STEP = 200
 
     aur_packages: list[list[str]] = aur.aur_installed_packages()
@@ -247,6 +262,9 @@ def list_packages():
 
 
 def update_package_cache(cache_version: bool = False) -> bool:
+    '''
+    Updates the package cache (packages.txt).
+    '''
     STEP = 200
     if path.exists(f'{settings.aurman_path}/packages.gz'):
         unlink(f'{settings.aurman_path}/packages.gz')
@@ -283,6 +301,9 @@ def show_config() -> bool:
 
 
 def main(args: list[str]) -> int:
+    '''
+    Entry point for aurman.
+    '''
     parser = argparse.ArgumentParser(prog=args[0],
                                      usage='%(prog)s [options]',
                                      description='Python 3 AUR CLI Manager',
