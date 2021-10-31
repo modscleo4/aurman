@@ -27,7 +27,7 @@ class Settings:
     INI parser
     '''
 
-    su_program: str = '/usr/bin/sudo'
+    su_program: str = 'sudo'
     '''
     sudo/doas
     '''
@@ -47,12 +47,18 @@ class Settings:
     Where to store log file
     '''
 
+    review_pkgbuild: bool = False
+    '''
+    Always review PKGBUILD
+    '''
+
     def __init__(self, FILE: str = '/etc/aurman.conf') -> None:
         self.config.read(FILE)
-        self.su_program = self.config.get('General', 'SU_PROGRAM', fallback='/usr/bin/sudo')
+        self.su_program = self.config.get('General', 'SU_PROGRAM', fallback='sudo')
         self.autorun = self.config.getboolean('General', 'AUTORUN', fallback=False)
         self.aurman_path = self.config.get('General', 'AURMAN_PATH', fallback='/tmp/aurman')
         self.log_path = self.config.get('General', 'LOG_PATH', fallback='/tmp/aurman.log')
+        self.review_pkgbuild = self.config.getboolean('Install', 'REVIEW_PKGBUILD', fallback=False)
 
     def __repr__(self) -> str:
         return f"[General]\n"\

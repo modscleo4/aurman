@@ -14,7 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-class ASCII_COLOR_CODES:
+import re
+from lib import pacman
+
+
+__version__ = '0.0.1'
+
+
+class AURManException(Exception):
+    pass
+
+
+class COLORS:
     reset: int = 0
     bold: int = 1
     underline: int = 4
@@ -39,8 +50,55 @@ class ASCII_COLOR_CODES:
     bright_white: int = 97
 
 
+def remove_version_constraint(pkg):
+    '''
+    Remove version constraint from package name.
+    '''
+    match = re.search('^[^<>=!]*', pkg)
+    return match.group() if match else ''
+
+
 def color_text(text: str, color: int):
     '''
     Return a colored text using ASCII escape sequences.
     '''
-    return f"\033[{color}m{text}\033[{ASCII_COLOR_CODES.reset}m"
+    return f"\033[{color}m{text}\033[{COLORS.reset}m"
+
+
+def color_from_version(package: str) -> str:
+    '''
+    Return a colored text using ASCII escape sequences based on package version.
+
+    Green if package is installed.
+
+    Yellow if package is installed but version constraint not checked.
+
+    Red if package is not installed.
+    '''
+    return COLORS.green if pacman.get_package_version(package) != '' else COLORS.yellow if pacman.get_package_version(remove_version_constraint(package)) != '' else COLORS.red
+
+def prompt(text: str, default: str = 'y') -> bool:
+    '''
+    Print a [y/n] prompt.
+    '''
+    result = input(f" {color_text('::', COLORS.blue)} {text} [{'Y/n' if default == 'y' else 'y/N'}]: ").lower()
+    result = result if result else default
+    return result == 'y'
+
+def info(text: str) -> None:
+    '''
+    Print an info message.
+    '''
+    print(f"{color_text('==>', COLORS.green)} {text}")
+
+def warning(text: str) -> None:
+    '''
+    Print a warning message.
+    '''
+    print(f"{color_text('==>', COLORS.bright_yellow)} {text}")
+
+def error(text: str) -> None:
+    '''
+    Print an error message.
+    '''
+    print(f"{color_text('==>', COLORS.red)} {text}")
