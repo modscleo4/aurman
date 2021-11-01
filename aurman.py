@@ -176,11 +176,13 @@ def install_packages(pkg: str, show_pkgbuild: bool = False, dependency: bool = F
     with Spinner():
         package: Package = Package(pkginfo)
 
+    force: bool = False
     try:
         if version.parse(package.version) <= version.parse(ver := pacman.get_package_version(package.name)):
             if not util.prompt(f"The package {package.name} is already updated. Continue anyway?", default='n'):
                 util.warning(f"Skipping {package.name}: Already installed and updated (version {ver}).")
                 return True
+            force = True
     except:
         raise AURManException(f"Invalid version info for package {package.name}.")
 
@@ -193,7 +195,7 @@ def install_packages(pkg: str, show_pkgbuild: bool = False, dependency: bool = F
         if deps := package.get_aur_deps():
             util.info(f"Processing dependencies of {package.name}...")
             for dep in deps:
-                if not install_packages(dep.name, True):
+                if not install_packages(dep.name, show_pkgbuild, dependency=True):
                     return False
 
         procout = subprocess.run(['git', 'clone', f"https://aur.archlinux.org/{package.base_package}.git", PKG_PATH])
@@ -204,10 +206,11 @@ def install_packages(pkg: str, show_pkgbuild: bool = False, dependency: bool = F
         if show_pkgbuild:
             procout = subprocess.run(['less', 'PKGBUILD'], cwd=PKG_PATH)
             if not util.prompt(f"Continue installation of {package.name}?"):
-                return True
+                return False
 
         procout = subprocess.run(
-            ['makepkg', '--needed', '-sir'] +
+            ['makepkg', '-sir'] +
+            (['--needed'] if not force else []) +
             (['--asdeps'] if dependency else []) +
             (['--noconfirm'] if settings.autorun else []), cwd=PKG_PATH)
         if procout.returncode:
@@ -223,7 +226,9 @@ def install_packages(pkg: str, show_pkgbuild: bool = False, dependency: bool = F
         if procout.returncode != 0:
             util.error(f"Error removing {package.name} build files.")
 
-    return True
+        return True
+
+    return False
 
 
 def update_packages():
@@ -249,7 +254,7 @@ def update_packages():
     util.info('The following packages will be updated: ' + ', '.join(map(lambda x: x.name, to_update)))
 
     for package in to_update:
-        if not install_packages(package.name):
+        if not install_packages(package.name, show_pkgbuild=settings.review_pkgbuild):
             return False
 
 
