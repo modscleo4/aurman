@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import re
+import sys
 from lib import pacman
 
 
@@ -77,6 +78,7 @@ def color_from_version(package: str) -> str:
     '''
     return COLORS.green if pacman.get_package_version(package) != '' else COLORS.yellow if pacman.get_package_version(remove_version_constraint(package)) != '' else COLORS.red
 
+
 def prompt(text: str, default: str = 'y') -> bool:
     '''
     Print a [y/n] prompt.
@@ -85,20 +87,23 @@ def prompt(text: str, default: str = 'y') -> bool:
     result = result if result else default
     return result == 'y'
 
-def info(text: str) -> None:
+
+def info(text: str, file=sys.stdout) -> None:
     '''
     Print an info message.
     '''
-    print(f"{color_text('==>', COLORS.green)} {text}")
+    print(f"{color_text('==>', COLORS.green)} {text}", file=file)
 
-def warning(text: str) -> None:
+
+def warning(text: str, file=sys.stdout) -> None:
     '''
     Print a warning message.
     '''
-    print(f"{color_text('==>', COLORS.bright_yellow)} {text}")
+    print(f"{color_text('==>', COLORS.bright_yellow)} {text}", file=file)
 
-def error(text: str) -> None:
+
+def error(text: str, file=sys.stderr) -> None:
     '''
     Print an error message.
     '''
-    print(f"{color_text('==>', COLORS.red)} {text}")
+    print(f"{color_text('==>', COLORS.red)} {text}", file=file)
